@@ -217,6 +217,136 @@ function stepConfetti(particles, gridW, gridH) {
 const YES_LINES = bannerLines('YES')
 const NO_LINES = bannerLines('NO')
 
+// --- Winner art (duel mode) ------------------------------------------------
+//
+// Two styles, picked by how long the text is so the result always reads well:
+//  • a full 5-row block font for short words (the YES/NO look, for any text);
+//  • a word-wrapped bordered box for longer phrases.
+// The style is chosen from *both* options so left and right look the same, and
+// a fill/border variant is rolled once per run for a little variety.
+
+// 5-row block font. Every glyph's rows are equal width; '?' is the fallback.
+const FONT = {
+  A: [' ██ ', '█  █', '████', '█  █', '█  █'],
+  B: ['███ ', '█  █', '███ ', '█  █', '███ '],
+  C: [' ███', '█   ', '█   ', '█   ', ' ███'],
+  D: ['███ ', '█  █', '█  █', '█  █', '███ '],
+  E: ['████', '█   ', '███ ', '█   ', '████'],
+  F: ['████', '█   ', '███ ', '█   ', '█   '],
+  G: [' ███', '█   ', '█ ██', '█  █', ' ███'],
+  H: ['█  █', '█  █', '████', '█  █', '█  █'],
+  I: ['███', ' █ ', ' █ ', ' █ ', '███'],
+  J: ['  ██', '   █', '   █', '█  █', ' ██ '],
+  K: ['█  █', '█ █ ', '██  ', '█ █ ', '█  █'],
+  L: ['█   ', '█   ', '█   ', '█   ', '████'],
+  M: ['█   █', '██ ██', '█ █ █', '█   █', '█   █'],
+  N: ['█   █', '██  █', '█ █ █', '█  ██', '█   █'],
+  O: [' ██ ', '█  █', '█  █', '█  █', ' ██ '],
+  P: ['███ ', '█  █', '███ ', '█   ', '█   '],
+  Q: [' ██ ', '█  █', '█  █', '█ ██', ' ███'],
+  R: ['███ ', '█  █', '███ ', '█ █ ', '█  █'],
+  S: [' ███', '█   ', ' ██ ', '   █', '███ '],
+  T: ['███', ' █ ', ' █ ', ' █ ', ' █ '],
+  U: ['█  █', '█  █', '█  █', '█  █', ' ██ '],
+  V: ['█   █', '█   █', '█   █', ' █ █ ', '  █  '],
+  W: ['█   █', '█   █', '█ █ █', '██ ██', '█   █'],
+  X: ['█   █', ' █ █ ', '  █  ', ' █ █ ', '█   █'],
+  Y: ['█   █', ' █ █ ', '  █  ', '  █  ', '  █  '],
+  Z: ['████', '   █', '  █ ', ' █  ', '████'],
+  0: [' ██ ', '█  █', '█  █', '█  █', ' ██ '],
+  1: [' █ ', '██ ', ' █ ', ' █ ', '███'],
+  2: ['███ ', '   █', ' ██ ', '█   ', '████'],
+  3: ['███ ', '   █', ' ██ ', '   █', '███ '],
+  4: ['█  █', '█  █', '████', '   █', '   █'],
+  5: ['████', '█   ', '███ ', '   █', '███ '],
+  6: [' ██ ', '█   ', '███ ', '█  █', ' ██ '],
+  7: ['████', '   █', '  █ ', ' █  ', ' █  '],
+  8: [' ██ ', '█  █', ' ██ ', '█  █', ' ██ '],
+  9: [' ██ ', '█  █', ' ███', '   █', ' ██ '],
+  ' ': ['  ', '  ', '  ', '  ', '  '],
+  '?': ['███ ', '   █', ' ██ ', '    ', ' █  '],
+  '!': ['█', '█', '█', ' ', '█'],
+  '.': [' ', ' ', ' ', ' ', '█'],
+  ',': [' ', ' ', ' ', '█', '█'],
+  "'": ['█', '█', ' ', ' ', ' '],
+  '-': ['   ', '   ', '███', '   ', '   '],
+  '&': [' ██ ', '█  █', ' ██ ', '█ █ ', ' ██ '],
+}
+
+function glyphFor(ch) {
+  return FONT[ch] || FONT[ch.toUpperCase()] || FONT['?']
+}
+
+// Width the text would occupy in the block font (glyphs + 1-col gaps).
+function blockTextWidth(text) {
+  const t = text.toUpperCase()
+  let w = 0
+  for (let i = 0; i < t.length; i++) w += (i ? 1 : 0) + glyphFor(t[i])[0].length
+  return w
+}
+
+// Render text into 5 block-font rows, optionally with an alternate fill char.
+function blockLines(text, fill) {
+  const t = text.toUpperCase()
+  const rows = ['', '', '', '', '']
+  for (let i = 0; i < t.length; i++) {
+    const g = glyphFor(t[i])
+    for (let r = 0; r < 5; r++) rows[r] += (i ? ' ' : '') + g[r]
+  }
+  if (fill && fill !== '█') for (let r = 0; r < 5; r++) rows[r] = rows[r].split('█').join(fill)
+  return rows
+}
+
+// Greedy word-wrap, hard-breaking any single word longer than `width`.
+function wrapText(text, width) {
+  const lines = []
+  let cur = ''
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    let w = word
+    while (w.length > width) { // break a too-long word across lines
+      if (cur) { lines.push(cur); cur = '' }
+      lines.push(w.slice(0, width))
+      w = w.slice(width)
+    }
+    if (!cur) cur = w
+    else if (cur.length + 1 + w.length <= width) cur += ' ' + w
+    else { lines.push(cur); cur = w }
+  }
+  if (cur) lines.push(cur)
+  return lines.length ? lines : ['']
+}
+
+const ART_BORDERS = [
+  { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+  { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+  { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
+  { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
+]
+// Per-run variation, rolled once and independent of which side wins.
+const ART_FILL = Math.random() < 0.5 ? '█' : '▓'
+const ART_BORDER = ART_BORDERS[(Math.random() * ART_BORDERS.length) | 0]
+
+// Render text inside a bordered, word-wrapped box.
+function boxLines(text, border, maxInner) {
+  const inner = wrapText(text, Math.max(4, maxInner))
+  const w = Math.max(...inner.map((l) => l.length))
+  const horiz = border.h.repeat(w + 2)
+  const rows = [border.tl + horiz + border.tr]
+  for (const l of inner) rows.push(border.v + ' ' + l.padEnd(w) + ' ' + border.v)
+  rows.push(border.bl + horiz + border.br)
+  return rows
+}
+
+// Block art when both options fit the screen as block text, else a box. Keyed
+// on both options so the style is identical no matter which one wins.
+function winnerArt(text, gridW) {
+  const cap = gridW - 4
+  if (blockTextWidth(options[0]) <= cap && blockTextWidth(options[1]) <= cap) {
+    return blockLines(text, ART_FILL)
+  }
+  return boxLines(text, ART_BORDER, gridW - 6)
+}
+
 // --- Terminal driver -------------------------------------------------------
 
 const ALT_SCREEN_ON = '\x1b[?1049h'
@@ -247,28 +377,35 @@ const cmd = argv[0] && argv[0].toLowerCase()
 
 if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
   process.stdout.write(
-    'siikafish — ask a fish a yes/no question.\n\n' +
+    'siikafish — let a spinning fish decide for you.\n\n' +
     'Usage:\n' +
     '  siikafish [question...]   spin the fish like a coin; it points to YES or NO\n' +
+    '  siikafish LEFT RIGHT      spin to pick one of two options (left vs right)\n' +
     '  siikafish swim            just watch the fish swim forever\n\n' +
     'Examples:\n' +
     '  siikafish\n' +
-    '  siikafish "ship on friday?"\n\n' +
+    '  siikafish "ship on friday?"\n' +
+    '  siikafish apple banana\n\n' +
     'Keys: q or Ctrl-C to quit.\n')
   process.exit(0)
 }
 
-// Deciding is the default; `swim` is the opt-in screensaver. Any other args are
-// taken as the (optional) question, with a leading decide verb stripped if given.
+// Deciding is the default; `swim` is the opt-in screensaver. Args after an
+// optional decide verb form the decision: exactly two of them (e.g.
+// `siikafish apple banana`) is a left-vs-right duel; anything else is taken as
+// an optional yes/no question.
 const swimMode = SWIM_CMDS.has(cmd)
 const decideMode = !swimMode
-const question = decideMode
-  ? (DECIDE_CMDS.has(cmd) ? argv.slice(1) : argv).join(' ').trim()
-  : ''
+const decideArgs = DECIDE_CMDS.has(cmd) ? argv.slice(1) : argv
+const duelMode = decideMode && decideArgs.length === 2
+const options = duelMode ? decideArgs : null
+const question = duelMode ? '' : decideArgs.join(' ').trim()
 
 // Non-interactive (piped) output: print a single frame, or a single verdict.
 if (!out.isTTY) {
-  if (decideMode) {
+  if (duelMode) {
+    process.stdout.write((Math.random() < 0.5 ? options[0] : options[1]) + '\n')
+  } else if (decideMode) {
     const yes = Math.random() < 0.5
     if (question) process.stdout.write(question + '\n')
     process.stdout.write((yes ? 'YES' : 'NO') + '\n')
@@ -342,8 +479,13 @@ function runSwim() {
 // heading. So it *looks* like momentum decided it, but every run is 50/50 and
 // always settles cleanly on one side (never wedged broadside).
 function runDecide() {
-  const yes = Math.random() < 0.5
-  const target = yes ? Math.PI : 0 // π → head points left; 0 → head points right
+  // The outcome is a fair coin chosen up front; the physics just animates toward
+  // it. `leftWins` ⇒ the head ends up pointing left (YES, or the first option).
+  const leftWins = Math.random() < 0.5
+  const target = leftWins ? Math.PI : 0 // π → head points left; 0 → head points right
+  // A yes/no question celebrates only the YES (left) outcome; a two-option duel
+  // celebrates whichever side wins.
+  const celebrate = duelMode ? true : leftWins
 
   // Random kick: start a little off-heading with a random-signed spin. A heavy
   // fish — modest initial ω with light friction — gives a slower, statelier whirl
@@ -380,24 +522,33 @@ function runDecide() {
     const frame = renderFish(0, gridW, gridH, CFG, { ay: theta, ax: pitch })
     out.write(CURSOR_HOME + frame)
 
-    if (question) {
-      const col = Math.max(1, Math.floor((gridW - question.length) / 2) + 1)
-      out.write(`\x1b[1;${col}H\x1b[2m${question}\x1b[0m`)
+    // Confetti sits behind the text overlays so the verdict stays crisp.
+    if (revealed && celebrate) {
+      if (celebFrames === 0) spawnConfetti(confetti, gridW, gridH, 70) // opening blast
+      else if (celebFrames < 45) spawnConfetti(confetti, gridW, gridH, 5) // sustain it
+      celebFrames++
+      stepConfetti(confetti, gridW, gridH)
     }
 
-    if (revealed) {
-      if (yes) {
-        if (celebFrames === 0) spawnConfetti(confetti, gridW, gridH, 70) // opening blast
-        else if (celebFrames < 45) spawnConfetti(confetti, gridW, gridH, 5) // sustain it
-        celebFrames++
-        stepConfetti(confetti, gridW, gridH)
+    // The duel options stay hidden during the spin; only the winner is revealed,
+    // in big block/box art (neutral colour, so it reads on any terminal theme).
+    if (duelMode) {
+      if (revealed) {
+        const winner = leftWins ? options[0] : options[1]
+        drawArt(winnerArt(winner, gridW), gridW, gridH, leftWins ? 'left' : 'right', '\x1b[1m')
       }
-      drawBanner(gridW, gridH, yes) // last, so the verdict stays crisp over confetti
-      if (!exiting) {
-        exiting = true
-        verdict = yes ? 'YES' : 'NO'
-        setTimeout(() => { cleanup(); process.exit(0) }, yes ? 4500 : 3200)
+    } else {
+      if (question) {
+        const col = Math.max(1, Math.floor((gridW - question.length) / 2) + 1)
+        out.write(`\x1b[1;${col}H\x1b[2m${question}\x1b[0m`)
       }
+      if (revealed) drawBanner(gridW, gridH, leftWins)
+    }
+
+    if (revealed && !exiting) {
+      exiting = true
+      verdict = duelMode ? (leftWins ? options[0] : options[1]) : (leftWins ? 'YES' : 'NO')
+      setTimeout(() => { cleanup(); process.exit(0) }, celebrate ? 4500 : 3200)
     }
   }, FRAME_MS)
 }
@@ -405,14 +556,24 @@ function runDecide() {
 // Paint the colored YES/NO block banner on the side the fish points to.
 function drawBanner(gridW, gridH, yes) {
   const lines = yes ? YES_LINES : NO_LINES
-  const w = lines[0].length
   const color = yes ? '\x1b[1;32m' : '\x1b[1;31m' // green / red
-  // Sit the banner above the fish (whose profile fills the middle rows) on the
-  // side the head points to, so the verdict is legible rather than overlapping.
+  drawArt(lines, gridW, gridH, yes ? 'left' : 'right', color)
+}
+
+// Place pre-rendered art rows above the fish: hugged to the chosen side when it
+// fits a half-width, otherwise centred. `style` is the SGR prefix per row.
+function drawArt(lines, gridW, gridH, side, style) {
+  const w = Math.max(...lines.map((l) => l.length))
   const top = Math.max(1, Math.floor(gridH * 0.1))
   const pad = Math.floor(gridW * 0.1)
-  const left = yes ? 1 + pad : Math.max(1, gridW - w - pad)
-  for (let r = 0; r < lines.length; r++) {
-    out.write(`\x1b[${top + r};${left}H${color}${lines[r]}\x1b[0m`)
+  let left
+  if (w <= Math.floor(gridW / 2) - 2) {
+    left = side === 'left' ? 1 + pad : Math.max(1, gridW - w - pad)
+  } else {
+    left = Math.max(1, Math.floor((gridW - w) / 2) + 1)
+  }
+  const rows = Math.min(lines.length, gridH - top + 1)
+  for (let r = 0; r < rows; r++) {
+    out.write(`\x1b[${top + r};${left}H${style}${lines[r]}\x1b[0m`)
   }
 }
