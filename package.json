@@ -1,7 +1,7 @@
 {
   "name": "siikafish",
   "version": "0.1.0",
-  "description": "A rotating 3D ASCII fish that swims in your terminal. Run with `npx siikafish`.",
+  "description": "A 3D ASCII fish that spins like a coin to answer your yes/no questions. Run with `npx siikafish`.",
   "type": "module",
   "bin": {
     "siikafish": "./bin/cli.js"

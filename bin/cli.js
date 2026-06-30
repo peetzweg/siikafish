@@ -24,7 +24,10 @@ const CFG = {
   light: { x: -0.4, y: 0.55, z: 0.74 },
 }
 
-function renderFish(t, gridW, gridH, cfg) {
+// `pose`, when given, supplies the yaw (ay) and pitch (ax) directly instead of
+// deriving them from the swim clock — the decide mode drives these from a
+// physics integrator so the fish can spin down to a chosen heading.
+function renderFish(t, gridW, gridH, cfg, pose) {
   const { ramp, size, RX, RY, RZ, facing, showDetails,
     yawSpeed, pitchSpeed, pitchAmplitude, light } = cfg
 
@@ -37,8 +40,8 @@ function renderFish(t, gridW, gridH, cfg) {
   const baseScaleX = gridW / 7.4
   const baseScaleY = gridH / 8.0
 
-  const ay = t * yawSpeed
-  const ax = Math.sin(t * pitchSpeed) * pitchAmplitude
+  const ay = pose ? pose.ay : t * yawSpeed
+  const ax = pose ? pose.ax : Math.sin(t * pitchSpeed) * pitchAmplitude
   const cosY = Math.cos(ay)
   const sinY = Math.sin(ay)
   const cosX = Math.cos(ax)
@@ -145,6 +148,75 @@ function renderFish(t, gridW, gridH, cfg) {
   return out
 }
 
+// --- YES / NO banner -------------------------------------------------------
+
+// Chunky 6-row block glyphs (solid full-block strokes). Only Y E S N O needed.
+const GLYPHS = {
+  Y: ['██    ██', ' ██  ██ ', '  ████  ', '   ██   ', '   ██   ', '   ██   '],
+  E: ['██████', '██    ', '█████ ', '██    ', '██    ', '██████'],
+  S: ['██████', '██    ', '██████', '    ██', '    ██', '██████'],
+  N: ['██   ██', '███  ██', '██ █ ██', '██  ███', '██   ██', '██   ██'],
+  O: [' █████ ', '██   ██', '██   ██', '██   ██', '██   ██', ' █████ '],
+}
+
+// Render a word into block rows, glyphs separated by a blank column.
+function bannerLines(word) {
+  const h = GLYPHS[word[0]].length
+  const rows = new Array(h).fill('')
+  for (let i = 0; i < word.length; i++) {
+    const g = GLYPHS[word[i]]
+    for (let r = 0; r < h; r++) rows[r] += (i ? ' ' : '') + g[r]
+  }
+  return rows
+}
+
+// --- Confetti --------------------------------------------------------------
+
+const CONFETTI_CHARS = ['*', '+', 'o', '.', '°', '•']
+// bright red/green/yellow/blue/magenta/cyan foregrounds
+const CONFETTI_COLORS = ['\x1b[91m', '\x1b[92m', '\x1b[93m', '\x1b[94m', '\x1b[95m', '\x1b[96m']
+
+// Emit `count` confetti particles from behind/under the fish, fired upward.
+function spawnConfetti(particles, gridW, gridH, count) {
+  const cx = gridW / 2
+  const cy = gridH / 2
+  for (let i = 0; i < count && particles.length < 260; i++) {
+    particles.push({
+      x: cx + (Math.random() * 2 - 1) * gridW * 0.16,
+      y: cy + Math.random() * 2,
+      vx: (Math.random() * 2 - 1) * 0.8,
+      vy: -(0.9 + Math.random() * 1.3), // negative = up; gravity pulls it back
+      ch: CONFETTI_CHARS[(Math.random() * CONFETTI_CHARS.length) | 0],
+      col: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0],
+    })
+  }
+}
+
+// Advance every particle under gravity, draw it, and drop the ones that exit.
+function stepConfetti(particles, gridW, gridH) {
+  const GRAV = 0.05
+  let buf = ''
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]
+    p.vy += GRAV
+    p.x += p.vx
+    p.y += p.vy
+    if (p.y >= gridH - 1 || p.x < 0 || p.x >= gridW) {
+      particles.splice(i, 1)
+      continue
+    }
+    const row = Math.round(p.y) + 1
+    const col = Math.round(p.x) + 1
+    if (row >= 1 && row <= gridH && col >= 1 && col <= gridW) {
+      buf += `\x1b[${row};${col}H${p.col}${p.ch}\x1b[0m`
+    }
+  }
+  if (buf) out.write(buf)
+}
+
+const YES_LINES = bannerLines('YES')
+const NO_LINES = bannerLines('NO')
+
 // --- Terminal driver -------------------------------------------------------
 
 const ALT_SCREEN_ON = '\x1b[?1049h'
@@ -166,10 +238,44 @@ function dims() {
   return { gridW: Math.max(20, cols), gridH: Math.max(8, rows) }
 }
 
-// Non-interactive (piped) output: print a single frame and exit.
+// --- Argument parsing ------------------------------------------------------
+
+const argv = process.argv.slice(2)
+const DECIDE_CMDS = new Set(['decide', 'flip', 'coin', 'yesno', 'ask', '?'])
+const SWIM_CMDS = new Set(['swim', 'swimming'])
+const cmd = argv[0] && argv[0].toLowerCase()
+
+if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
+  process.stdout.write(
+    'siikafish — ask a fish a yes/no question.\n\n' +
+    'Usage:\n' +
+    '  siikafish [question...]   spin the fish like a coin; it points to YES or NO\n' +
+    '  siikafish swim            just watch the fish swim forever\n\n' +
+    'Examples:\n' +
+    '  siikafish\n' +
+    '  siikafish "ship on friday?"\n\n' +
+    'Keys: q or Ctrl-C to quit.\n')
+  process.exit(0)
+}
+
+// Deciding is the default; `swim` is the opt-in screensaver. Any other args are
+// taken as the (optional) question, with a leading decide verb stripped if given.
+const swimMode = SWIM_CMDS.has(cmd)
+const decideMode = !swimMode
+const question = decideMode
+  ? (DECIDE_CMDS.has(cmd) ? argv.slice(1) : argv).join(' ').trim()
+  : ''
+
+// Non-interactive (piped) output: print a single frame, or a single verdict.
 if (!out.isTTY) {
-  const { gridW, gridH } = dims()
-  process.stdout.write(renderFish(0, gridW, Math.min(gridH, 24), CFG) + '\n')
+  if (decideMode) {
+    const yes = Math.random() < 0.5
+    if (question) process.stdout.write(question + '\n')
+    process.stdout.write((yes ? 'YES' : 'NO') + '\n')
+  } else {
+    const { gridW, gridH } = dims()
+    process.stdout.write(renderFish(0, gridW, Math.min(gridH, 24), CFG) + '\n')
+  }
   process.exit(0)
 }
 
@@ -204,14 +310,109 @@ if (process.stdin.isTTY) {
 
 enter()
 
-const start = Date.now()
-const SPEED = 1
 const FRAME_MS = 33 // ~30fps
 
-timer = setInterval(() => {
-  if (!running) return
-  const { gridW, gridH } = dims()
-  const elapsed = (Date.now() - start) * SPEED
-  const frame = renderFish(elapsed, gridW, gridH, CFG)
-  out.write(CURSOR_HOME + frame)
-}, FRAME_MS)
+// Print the spoken verdict to the real terminal after we leave the alt screen,
+// so `siikafish decide` is also usable in a script: `[ "$(... )" = YES ]`.
+let verdict = null
+function speakVerdict() {
+  if (verdict === null) return
+  if (question) process.stdout.write(question + '\n')
+  process.stdout.write(verdict + '\n')
+}
+process.on('exit', speakVerdict)
+
+if (decideMode) runDecide()
+else runSwim()
+
+function runSwim() {
+  const start = Date.now()
+  timer = setInterval(() => {
+    if (!running) return
+    const { gridW, gridH } = dims()
+    const frame = renderFish(Date.now() - start, gridW, gridH, CFG)
+    out.write(CURSOR_HOME + frame)
+  }, FRAME_MS)
+}
+
+// Spin the fish like a coin and let it settle pointing left (YES) or right (NO).
+//
+// The outcome is a fair coin chosen up front; the visible spin is a genuine
+// damped-pendulum integration whose single stable rest angle is that outcome's
+// heading. So it *looks* like momentum decided it, but every run is 50/50 and
+// always settles cleanly on one side (never wedged broadside).
+function runDecide() {
+  const yes = Math.random() < 0.5
+  const target = yes ? Math.PI : 0 // π → head points left; 0 → head points right
+
+  // Random kick: start a little off-heading with a random-signed spin. A heavy
+  // fish — modest initial ω with light friction — gives a slower, statelier whirl
+  // (~3 rev/s) that carries ~7 turns and decelerates gradually before resting.
+  let theta = target + (Math.random() * 2 - 1) * 1.2
+  let omega = (Math.random() < 0.5 ? -1 : 1) * (0.55 + Math.random() * 0.25)
+
+  const PULL = 0.015   // restoring torque toward the resting heading
+  const FRICTION = 0.982 // per-frame angular damping (light → long spin-down)
+  // Climbing back over the unstable "top" to the other side needs |ω| ≥
+  // √(4·PULL) ≈ 0.24, so once the fish is below this within the final basin the
+  // outcome can no longer change. We reveal a bit under that, so by reveal time
+  // the fish already looks all-but-settled while it finishes its last wobble.
+  const REVEAL_OMEGA = 0.12
+  let revealed = false
+  let exiting = false
+  const confetti = []
+  let celebFrames = 0
+
+  timer = setInterval(() => {
+    if (!running) return
+
+    omega += -PULL * Math.sin(theta - target)
+    omega *= FRICTION
+    theta += omega
+    if (!revealed && Math.abs(omega) < REVEAL_OMEGA && Math.cos(theta - target) > 0.2) {
+      revealed = true
+    }
+
+    // Tilt the nose with the spin; it flattens out on its own as ω → 0.
+    const pitch = Math.max(-0.5, Math.min(0.5, omega * 1.3))
+
+    const { gridW, gridH } = dims()
+    const frame = renderFish(0, gridW, gridH, CFG, { ay: theta, ax: pitch })
+    out.write(CURSOR_HOME + frame)
+
+    if (question) {
+      const col = Math.max(1, Math.floor((gridW - question.length) / 2) + 1)
+      out.write(`\x1b[1;${col}H\x1b[2m${question}\x1b[0m`)
+    }
+
+    if (revealed) {
+      if (yes) {
+        if (celebFrames === 0) spawnConfetti(confetti, gridW, gridH, 70) // opening blast
+        else if (celebFrames < 45) spawnConfetti(confetti, gridW, gridH, 5) // sustain it
+        celebFrames++
+        stepConfetti(confetti, gridW, gridH)
+      }
+      drawBanner(gridW, gridH, yes) // last, so the verdict stays crisp over confetti
+      if (!exiting) {
+        exiting = true
+        verdict = yes ? 'YES' : 'NO'
+        setTimeout(() => { cleanup(); process.exit(0) }, yes ? 4500 : 3200)
+      }
+    }
+  }, FRAME_MS)
+}
+
+// Paint the colored YES/NO block banner on the side the fish points to.
+function drawBanner(gridW, gridH, yes) {
+  const lines = yes ? YES_LINES : NO_LINES
+  const w = lines[0].length
+  const color = yes ? '\x1b[1;32m' : '\x1b[1;31m' // green / red
+  // Sit the banner above the fish (whose profile fills the middle rows) on the
+  // side the head points to, so the verdict is legible rather than overlapping.
+  const top = Math.max(1, Math.floor(gridH * 0.1))
+  const pad = Math.floor(gridW * 0.1)
+  const left = yes ? 1 + pad : Math.max(1, gridW - w - pad)
+  for (let r = 0; r < lines.length; r++) {
+    out.write(`\x1b[${top + r};${left}H${color}${lines[r]}\x1b[0m`)
+  }
+}
