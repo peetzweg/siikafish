@@ -10,7 +10,15 @@
     "bin"
   ],
   "license": "MIT",
-  "author": "Philip Poloczek <philip.poloczek@parity.io>",
+  "author": "peetzweg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/peetzweg/siikafish.git"
+  },
+  "bugs": {
+    "url": "https://github.com/peetzweg/siikafish/issues"
+  },
+  "homepage": "https://github.com/peetzweg/siikafish#readme",
   "keywords": [
     "ascii",
     "fish",
