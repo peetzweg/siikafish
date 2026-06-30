@@ -1,0 +1,22 @@
+{
+  "name": "siikafish",
+  "version": "0.1.0",
+  "description": "A rotating 3D ASCII fish that swims in your terminal. Run with `npx siikafish`.",
+  "type": "module",
+  "bin": {
+    "siikafish": "./bin/cli.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "author": "Philip Poloczek <philip.poloczek@parity.io>",
+  "keywords": [
+    "ascii",
+    "fish",
+    "terminal",
+    "animation",
+    "cli",
+    "3d"
+  ]
+}
