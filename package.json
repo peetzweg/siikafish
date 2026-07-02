@@ -9,6 +9,11 @@
   "files": [
     "bin"
   ],
+  "scripts": {
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
+  },
   "license": "MIT",
   "author": "peetzweg",
   "repository": {
@@ -26,5 +31,8 @@
     "animation",
     "cli",
     "3d"
-  ]
+  ],
+  "devDependencies": {
+    "@changesets/cli": "^2.29.4"
+  }
 }
