@@ -518,9 +518,9 @@ function runDecide() {
   const FRICTION = 0.982 // per-frame angular damping (light → long spin-down)
   // Climbing back over the unstable "top" to the other side needs |ω| ≥
   // √(4·PULL) ≈ 0.24, so once the fish is below this within the final basin the
-  // outcome can no longer change. We reveal a bit under that, so by reveal time
-  // the fish already looks all-but-settled while it finishes its last wobble.
-  const REVEAL_OMEGA = 0.12
+  // outcome can no longer change. We reveal well under that (~0.25 rev/s), so by
+  // reveal time the fish clearly looks settled while it finishes its last wobble.
+  const REVEAL_OMEGA = 0.06
   let revealed = false
   let exiting = false
   const confetti = []
