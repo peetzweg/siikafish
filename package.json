@@ -1,6 +1,6 @@
 {
   "name": "siikafish",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A 3D ASCII fish that spins like a coin to answer yes/no questions or pick between two options. Run with `npx siikafish`.",
   "type": "module",
   "bin": {

@@ -13,8 +13,8 @@ const RAMP = ' .,-~:;=!*#$@'
 const CFG = {
   ramp: RAMP,
   size: 1,
-  RX: 2.0,
-  RY: 0.75,
+  RX: 1.65,
+  RY: 0.85,
   RZ: 0.65,
   facing: 1,
   showDetails: true,
@@ -23,6 +23,10 @@ const CFG = {
   pitchAmplitude: 0.7,
   light: { x: -0.4, y: 0.55, z: 0.74 },
 }
+
+// Girth varies a touch per run (slim ↔ plump) for a bit of character. The
+// fit-to-terminal scaling keeps every value in this range under the width cap.
+CFG.RY = 0.6 + Math.random() * 0.35
 
 // `pose`, when given, supplies the yaw (ay) and pitch (ax) directly instead of
 // deriving them from the swim clock — the decide mode drives these from a
@@ -35,10 +39,25 @@ function renderFish(t, gridW, gridH, cfg, pose) {
   const zbuf = new Float32Array(gridW * gridH).fill(-Infinity)
 
   const lLen = Math.hypot(light.x, light.y, light.z) || 1
-  // Terminal cells are roughly twice as tall as wide, so the vertical base
-  // scale is squeezed relative to the browser version to keep the fish round.
-  const baseScaleX = gridW / 7.4
-  const baseScaleY = gridH / 8.0
+  // One uniform scale, so the fish's proportions never depend on the terminal's
+  // aspect ratio. (Scaling X by gridW and Y by gridH independently, as before,
+  // stretched the fish into a long thin boy on wide windows.) Terminal cells are
+  // ~2:1 (tall:wide), so a "square" unit needs half as many cells vertically —
+  // hence CELL_ASPECT. We then fit the fish inside the terminal: at most ~66% of
+  // the width AND ~80% of the height, taking whichever is the tighter bound, so
+  // it fills the vertical space on both big and small windows.
+  const CELL_ASPECT = 0.5
+  const spanX = 2 * RX + 0.97 // widest side-on: body ±RX plus the trailing tail
+  const spanY = 2 * RY + 0.92 // tallest: dorsal + ventral fins reaching past the body
+  // Reserve a couple of cells: discretising the projected extent adds ~1–2
+  // columns (rounding + inclusive count) on top of the continuous budget, so
+  // the measured width would otherwise creep just over the 66% cap on small
+  // windows. Subtracting here keeps the *rendered* fish at ≤66% everywhere.
+  const baseScaleX = Math.min(
+    (0.66 * gridW - 2) / spanX,
+    (0.80 * gridH - 1) / (spanY * CELL_ASPECT),
+  )
+  const baseScaleY = baseScaleX * CELL_ASPECT
 
   const ay = pose ? pose.ay : t * yawSpeed
   const ax = pose ? pose.ax : Math.sin(t * pitchSpeed) * pitchAmplitude
@@ -52,6 +71,7 @@ function renderFish(t, gridW, gridH, cfg, pose) {
   const cx = gridW / 2
   const cy = gridH / 2
   const rampLen = ramp.length || 1
+  const hx = RX / 2 // head details were placed for RX=2; scale them to the current length
 
   function plot(x, y, z, nx, ny, nz, boost) {
     const fx = x * facing
@@ -102,11 +122,12 @@ function renderFish(t, gridW, gridH, cfg, pose) {
     }
   }
 
-  // Tail.
+  // Tail — trimmed to ~2/3 of its former reach and height so it doesn't dwarf
+  // the body.
   const tailStep = size > 0.5 ? 0.05 : 0.08
   for (let s = 0; s <= 1; s += tailStep) {
-    const tx = -RX - s * 1.45
-    const halfH = 0.18 + s * 0.78
+    const tx = -RX - s * 0.97
+    const halfH = 0.12 + s * 0.52
     for (let h = -halfH; h <= halfH; h += 0.06) {
       plot(tx, h, 0.02, -0.65, 0, 0.76, 0.05)
       plot(tx, h, -0.02, -0.65, 0, -0.76, 0.05)
@@ -129,12 +150,12 @@ function renderFish(t, gridW, gridH, cfg, pose) {
   }
 
   if (showDetails && size > 0.35) {
-    plot(1.55, 0.18, 0.45, 0, 0, 1, 1.5)
-    plot(1.6, 0.18, 0.42, 0, 0, 1, 1.5)
-    plot(1.85, -0.08, 0.32, 1, 0, 0.4, 0.6)
-    plot(1.85, -0.18, 0.30, 1, 0, 0.4, 0.6)
+    plot(1.55 * hx, 0.18, 0.45, 0, 0, 1, 1.5)
+    plot(1.6 * hx, 0.18, 0.42, 0, 0, 1, 1.5)
+    plot(1.85 * hx, -0.08, 0.32, 1, 0, 0.4, 0.6)
+    plot(1.85 * hx, -0.18, 0.30, 1, 0, 0.4, 0.6)
     for (let g = -0.45; g <= 0.45; g += 0.08) {
-      plot(1.05, g * 0.7, 0.55 - Math.abs(g) * 0.15, -0.5, 0, 0.86, 0.1)
+      plot(1.05 * hx, g * 0.7, 0.55 - Math.abs(g) * 0.15, -0.5, 0, 0.86, 0.1)
     }
   }
 
