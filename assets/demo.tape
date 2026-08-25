@@ -5,7 +5,7 @@ Set Width 800
 Set Height 480
 Set FontSize 16
 Set Padding 24
-Set Framerate 30
+Set Framerate 45
 Set TypingSpeed 55ms
 
 # Run the working-tree CLI while presenting the same command users run.
