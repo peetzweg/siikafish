@@ -9,6 +9,8 @@
    @@@                                 ~~~~~~~~~
 ```
 
+![siikafish choosing between two options](assets/demo.gif)
+
 ## Usage
 
 ```
