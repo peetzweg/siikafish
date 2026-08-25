@@ -1,13 +1,8 @@
-```
-                                    #########
-   @@@                           ###         ###
-   @@@@@@@@@            $@@@@@@@@@@@@@@@@@@@@@@@@@$$$$#*!
-   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@-@@@$$$@$$$$$$$##@#*!;
-   @@@@@@@@@@@@@@@!$$@@@$$@$$$$#$$-$$-$$-$#-##*###$##*****!=#:-
-   @@@@@@@@@@@@@@@@=!**#######*###*##!**;******=**!=!!!==;;:#-
-   @@@@@@@@@            ---~~~:::::::::::::::::~~~-------
-   @@@                                 ~~~~~~~~~
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/demo-dark.gif">
+  <source media="(prefers-color-scheme: light)" srcset="assets/demo-light.gif">
+  <img alt="siikafish answering questions and choosing between two options" src="assets/demo-light.gif">
+</picture>
 
 ## Usage
 
